@@ -8,6 +8,7 @@
 
 library(dplyr)
 library(tidyr)
+library(boot)
 
 source("monitor.r")
 
@@ -87,22 +88,46 @@ GetSysDataInfo <- function(sysID) {
       # init sample data
       initsample <- sample(nrow(sysData), sampleSizes[i])
       
-      # training sample data
-      smpl <- sample(initsample, sampleSizes[i], replace = TRUE)
-      
-      # valid sample data
-      validsample <- setdiff(initsample, smpl)
-      
-      equisizedSamples <- c(equisizedSamples, list(smpl))
-      
-      tmpValidSamples <- c(tmpValidSamples, list(validsample))
-      
-      # tempDistance <- GetSampleFeatureDistance(sysData, smpl, featureNum) 
-      # tempDistance <- GetPerfValue(sysData, smpl) 
-      tempDistance <- mean(c(GetPerfValue(sysData, smpl), GetSampleFeatureDistance(sysData, smpl, featureNum)))
-      
-      #tempSimilarityDistance <- c(tempSimilarityDistance, list(tempDistance))  
-      tempsimilarity <- c(tempsimilarity,tempDistance)
+      if(experParams$currentSampleMethod == "bootsraping"){
+        # training sample data
+        smpl <- sample(initsample, sampleSizes[i], replace = TRUE)
+        # valid sample data
+        validsample <- setdiff(initsample, smpl)
+        # data to list format
+        equisizedSamples <- c(equisizedSamples, list(smpl))
+        tmpValidSamples <- c(tmpValidSamples, list(validsample))
+        
+        # calculate the distance between sample and whole data
+        tempDistance <- mean(c(GetPerfValue(sysData, smpl), GetSampleFeatureDistance(sysData, smpl, featureNum)))
+        tempsimilarity <- c(tempsimilarity,tempDistance)
+      }
+      else if(experParams$currentSampleMethod == "holdout"){
+        # training sample data  * 70%
+        trainSampleSize = sampleSizes[i]*0.7
+        smpl <- sample(initsample, trainSampleSize)
+        # valid sample data
+        validsample <- setdiff(initsample, smpl)
+        # data to list format
+        equisizedSamples <- c(equisizedSamples, list(smpl))
+        tmpValidSamples <- c(tmpValidSamples, list(validsample))
+        
+        # calculate the distance between sample and whole data
+        tempDistance <- mean(c(GetPerfValue(sysData, smpl), GetSampleFeatureDistance(sysData, smpl, featureNum)))
+        tempsimilarity <- c(tempsimilarity,tempDistance)
+      }
+      else if(experParams$currentSampleMethod == "crossvalidation"){
+        # training sample data
+        smpl <- crossValidationSample(initsample, sampleSizes[i], experParams$foldNumber)
+        # valid sample data
+        validsample <- setdiff(initsample, smpl)
+        # data to list format
+        equisizedSamples <- c(equisizedSamples, list(smpl))
+        tmpValidSamples <- c(tmpValidSamples, list(validsample))
+        
+        # calculate the distance between sample and whole data
+        tempDistance <- mean(c(GetPerfValue(sysData, smpl), GetSampleFeatureDistance(sysData, smpl, featureNum)))
+        tempsimilarity <- c(tempsimilarity,tempDistance)
+      }
       
     }
     # training samples
@@ -148,6 +173,9 @@ GetSysDataInfo <- function(sysID) {
 
   return(dataInfo)
 }
+
+
+
 
 # get the similarity by the 1:featureNum between whole data and sample data  
 GetSampleFeatureDistance <- function(sysData, sampleId, featureNum){
@@ -249,5 +277,32 @@ removeMandatoryFeature <-function(sysData){
   return(sysData)
 }
 
+# sampling by cross-validation method; if the size is less than foldNumber, then use hold-out method(70%/30%)
+crossValidationSample <- function(sampleData, sampleSize, foldNumber){
+  dataLength = length(sampleData)
+  smpl <- NULL
+  folds <- list()
+  
+  if(dataLength<=foldNumber){
+    trainSampleSize = sampleSize*0.7
+    smpl <- sample(sampleData, trainSampleSize)
+    
+  }
+  else{
+    data <- sampleData
+    oneFoldSampleNum <- dataLength/foldNumber
+    for(i in 1:foldNumber){
+      onefold <- sample(data, oneFoldSampleNum)
+      folds[[i]] <- onefold
+      data <- setdiff(data, onefold)
+    }
+    selectFoldIndex = sample(c(1:foldNumber),1)
+    validateSample <- folds[[selectFoldIndex]]
+    smpl <- setdiff(sampleData, validateSample)
+  }
 
+  
+  return(smpl)
+  
+}
 

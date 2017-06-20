@@ -14,6 +14,7 @@ library(stringr)
 library(sqldf)
 library(tidyr)
 library(xtable)
+library(rBayesianOptimization)
 
 source("init.r")
 source("data.r")
@@ -25,32 +26,38 @@ Analyse <- function() {
   # Analyse systems using regression methods
   for (m in 1:length(methodNames)) {
     for (s in 1:length(systemNames)) {
-      
-      # remove other configuration
-      # return the default configuration
-      experParams$sampleSizes <<- experParams$defalutSampleSizes
-      
-      # Perform data analysis
-      sysDataInfo <- GetSysDataInfo(s)
-      methodInfo <- GetMethodInfo(m)
-      accuracyData <- AnalysePredError(sysDataInfo, methodInfo)
-
-      # Export analysis results
-      accuracyFile <- file.path(outputFolder,
-                                paste(methodNames[m], "_",
-                                      systemNames[s], "_Details.csv", sep = ""))
-      write.csv(accuracyData, file = accuracyFile, row.names = FALSE)
-      
-      
-      # statis the result
-      statResult <- statAccuracyData(accuracyData, sysDataInfo$sampleSizes)
-      
-      # Export analysis results
-      statResultFile <- file.path(outputFolder,
-                                paste(methodNames[m], "_",
-                                      systemNames[s], "_Stat.csv", sep = ""))
-      write.csv(statResult, file = statResultFile, row.names = FALSE)
-      
+      for(e in 1:length(experParams$sampleMethod)){
+        for(p in 1:length(experParams$paraSearchMethod)){
+          # remove other configuration
+          # return the default configuration
+          experParams$sampleSizes <<- experParams$defalutSampleSizes
+          experParams$currentSampleMethod <<- experParams$sampleMethod[e]
+          experParams$currentSearchMethod <<- experParams$paraSearchMethod[p]
+          
+          # Perform data analysis
+          sysDataInfo <- GetSysDataInfo(s)
+          methodInfo <- GetMethodInfo(m)
+          accuracyData <- AnalysePredError(sysDataInfo, methodInfo)
+          
+          # Export analysis results
+          accuracyFile <- file.path(outputFolder,
+                                    paste(methodNames[m], "_",
+                                          systemNames[s], "_Details_",experParams$currentSampleMethod,"_",
+                                          experParams$currentSearchMethod,".csv", sep = ""))
+          write.csv(accuracyData, file = accuracyFile, row.names = FALSE)
+          
+          
+          # statis the result
+          statResult <- statAccuracyData(accuracyData, sysDataInfo$sampleSizes)
+          
+          # Export analysis results
+          statResultFile <- file.path(outputFolder,
+                                      paste(methodNames[m], "_",
+                                            systemNames[s], "_Stat_",experParams$currentSampleMethod,"_",
+                                            experParams$currentSearchMethod,".csv", sep = ""))
+          write.csv(statResult, file = statResultFile, row.names = FALSE)
+        }
+      }
     }
   }
   
@@ -204,38 +211,98 @@ GetPredError <- function(methodInfo, sysDataInfo, sampleSizeID, sampleID) {
     aseTestError <- colMeans(abs(testData - asepredicted) / testData * 100)
   }
   
-  for(splitId in 1:splitNum){
+  if(experParams$currentSearchMethod=="randomsearch"){
+    splitId = sample(splitNum,1)
+    minSplitValue <- methodsParams$cart$minsplit[splitId]
+    trainSize <- length(rownames(trainData))
+    cpId = sample(complexityNum,1)
+    methodParams <- c(minSplitValue, methodsParams$cart$minbucket[splitId]);
+    methodParams <- c(methodParams, methodsParams$cart$maxdepth, methodsParams$cart$complexity[cpId]);
+    
+    model <- Trainer(methodInfo$methodName, methodParams, trainData)
+    
+    # valid system performance and get valid prediction
+    predicted <- predict(model, newdata = sysDataInfo$sysData[validObs, input])
+    
+    # Calculate relative error
+    validError <- colMeans(abs(ValidData - predicted) / ValidData * 100) 
+    
+    if(minError > validError){
+      minError <- validError
+      bestMethodParams <- methodParams
+      bestModel <- model
+    }
+  }
+  # grid search method
+  else if(experParams$currentSearchMethod=="gridsearch"){
+    for(splitId in 1:splitNum){
+      minSplitValue <- methodsParams$cart$minsplit[splitId]
+      trainSize <- length(rownames(trainData))
+      if(minSplitValue<=trainSize){
+        for(cpId in 1:complexityNum){
+          methodParams <- c(minSplitValue, methodsParams$cart$minbucket[splitId]);
+          methodParams <- c(methodParams, methodsParams$cart$maxdepth, methodsParams$cart$complexity[cpId]);
+          model <- Trainer(methodInfo$methodName, methodParams, trainData)
+          # valid system performance and get valid prediction
+          predicted <- predict(model, newdata = sysDataInfo$sysData[validObs, input])
+          # Calculate relative error
+          validError <- colMeans(abs(ValidData - predicted) / ValidData * 100) 
+          if(minError > validError){
+            minError <- validError
+            bestMethodParams <- methodParams
+            bestModel <- model
+          }
+        } # complexity  1:complexityNum 
+      } # Search Space : minSplitValue<=trainSize
+    }  # minSplit 1:splitNum
+  } 
+  else if(experParams$currentSearchMethod=="bayesian"){
+    
+    BayesianParams <<- list()
+    
+    # trainData, validObs, input, ValidData
+    BayesianParams$trainData <<- trainData
+    BayesianParams$newdata <<- sysDataInfo$sysData[validObs, input]
+    BayesianParams$ValidData <<- ValidData
+    BayesianParams$methodName <<- methodInfo$methodName
+    
+    init_grid_dt<-data.frame(splitId=c(4L,20L,32L),cpId=c(2L,3L,4L))
+
+    OPT_Model <- BayesianOptimization(BayesianOptimizationFun,
+                                      bounds = list(splitId = c(1L,splitNum),
+                                                    cpId = c(1L, complexityNum)),
+                                      init_grid_dt = init_grid_dt, init_points = 1, n_iter = 1,
+                                      acq = "ucb", kappa = 2.576, eps = 0.0,
+                                      verbose = TRUE)
+    
+    # get best parameters
+    splitId <- OPT_Model$Best_Par["splitId"]
+    cpId <-  OPT_Model$Best_Par["cpId"]
     
     minSplitValue <- methodsParams$cart$minsplit[splitId]
     trainSize <- length(rownames(trainData))
+    methodParams <- c(minSplitValue, methodsParams$cart$minbucket[splitId]);
+    methodParams <- c(methodParams, methodsParams$cart$maxdepth, methodsParams$cart$complexity[cpId]);
     
-    if(minSplitValue<=trainSize){
-      
-      for(cpId in 1:complexityNum){
-        
-        methodParams <- c(minSplitValue, methodsParams$cart$minbucket[splitId]);
-        methodParams <- c(methodParams, methodsParams$cart$maxdepth, methodsParams$cart$complexity[cpId]);
-        
-        model <- Trainer(methodInfo$methodName, methodParams, trainData)
-        
-        # valid system performance and get valid prediction
-        predicted <- predict(model, newdata = sysDataInfo$sysData[validObs, input])
-        
-        # Calculate relative error
-        validError <- colMeans(abs(ValidData - predicted) / ValidData * 100) 
-        
-        if(minError > validError){
-          minError <- validError
-          bestMethodParams <- methodParams
-          bestModel <- model
-        }
-        
-      } # complexity  1:complexityNum 
-      
-    } # Search Space : minSplitValue<=trainSize
+    model <- Trainer(methodInfo$methodName, methodParams, trainData)
     
-  }  # minSplit 1:splitNum
+    
+    # valid system performance and get valid prediction
+    predicted <- predict(model, newdata = sysDataInfo$sysData[validObs, input])
+    
+    # Calculate relative error
+    validError <- colMeans(abs(ValidData - predicted) / ValidData * 100) 
+    
+    if(minError > validError){
+      minError <- validError
+      bestMethodParams <- methodParams
+      bestModel <- model
+    }
+    
+  }
+    
   
+
   modelTime <- difftime(Sys.time(), startTime)
 
   # Predict system performance and get actual performance values
@@ -262,6 +329,27 @@ GetPredError <- function(methodInfo, sysDataInfo, sampleSizeID, sampleID) {
   modelParamsResult$modelTime <- modelTime
 
   return(modelParamsResult)
+}
+
+
+BayesianOptimizationFun <- function(splitId, cpId){
+  
+
+  minSplitValue <- methodsParams$cart$minsplit[splitId]
+  trainSize <- length(rownames(BayesianParams$trainData))
+
+  methodParams <- c(minSplitValue, methodsParams$cart$minbucket[splitId])
+  methodParams <- c(methodParams, methodsParams$cart$maxdepth, methodsParams$cart$complexity[cpId])
+  
+  model <- Trainer(BayesianParams$methodName, methodParams, BayesianParams$trainData)
+  
+  # valid system performance and get valid prediction
+  predicted <- predict(model, newdata = BayesianParams$newdata)
+  
+  # score = 100-error (maximal is best)
+  score <- 100-colMeans(abs(BayesianParams$ValidData - predicted) / BayesianParams$ValidData * 100) 
+  
+  list(Score = score, Pred = 0)
 }
 
 
@@ -375,12 +463,12 @@ statAccuracyData <- function(accuracyData, sampleSizes){
   
   ValidError <- subset(resultData,select=c("ValidError(%)"))
   
-  corDisWithError <- cor(AvgSampleDistance$AvgSampleDistance, GeneralizedError$GeneralizedError)
-  SpearMancorDisWithError <- cor(AvgSampleDistance$AvgSampleDistance, GeneralizedError$GeneralizedError, method = "spearman")
+  corDisWithError <- cor(AvgSampleDistance$AvgSampleDistance, GeneralizedError$`GeneralizedError(%)`)
+  SpearMancorDisWithError <- cor(AvgSampleDistance$AvgSampleDistance, GeneralizedError$`GeneralizedError(%)`, method = "spearman")
   
-  corValidationWithError <- cor(ValidError$ValidError, GeneralizedError$GeneralizedError)
+  corValidationWithError <- cor(ValidError$'ValidError(%)', GeneralizedError$`GeneralizedError(%)`)
   
-  SpearMancorValidationWithError <- cor(ValidError$ValidError, GeneralizedError$GeneralizedError, method = "spearman")
+  SpearMancorValidationWithError <- cor(ValidError$'ValidError(%)', GeneralizedError$`GeneralizedError(%)`, method = "spearman")
   
   # blank space area
   resultRow <- c("","","","","","","","","","","","","")

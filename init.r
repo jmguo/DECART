@@ -47,7 +47,7 @@ InitMethodsParams <- function() {
   # Initialize CART parameters
   # minsplit, minbucket - depend on number of observations
   cartNames   <- c("minsplit", "minbucket", "maxdepth", "complexity")
-  cartMinSplit <- c(seq(4,52,4))
+  cartMinSplit <- c(seq(1,52,1))
   cartMinBucket <-  round(1/3 * cartMinSplit)
   cartmaxdepth    <- 30
   cartComplexity <- c(0.01, 0.001, 0.0001, 0.00001, 0.000001)
@@ -62,21 +62,30 @@ InitMethodsParams <- function() {
 InitParamsExperiment <- function() {
   # Initializes parameters relevant to the whole experiment
   # input the data name
-#  systemNames <<- c( "AJStat","Apache","BerkeleyC", "BerkeleyJ","clasp","LLVM","lrzip","SQLite_all4653","x264_158")
-  systemNames <<- c("AJStat")
+  # systemNames <<- c( "AJStat","Apache","BerkeleyC", "BerkeleyJ","clasp","LLVM","lrzip","SQLite_all4653","x264_158")
+  # systemNames <<- c( "Hipacc")
+  systemNames <<- c( "AJStat","Apache","BerkeleyC", "BerkeleyJ","clasp","LLVM","lrzip","SQLite_all4653","x264_158")
   
-    # systemNames <<- c( "Hipacc")
-
-
   experParams <<- list()
   # for dataset "Hipacc" , the experParams$sampleSizes applies the number 20 for 20*N
-  experParams$sampleSizes <<- 9   # Sizes to generate (1*N, 2*N, ..., 9*N)
-  experParams$sampleRep <<- 30    # Experiment repetitions
+  experParams$sampleSizes <<- 9   # default Sizes to generate (1*N, 2*N, ..., 9*N) except "Hipacc" (20N)
+  experParams$sampleRep <<- 30   # Experiment repetitions ,default 30,  
+  
+  
   experParams$defalutSampleSizes <<- experParams$sampleSizes # default Sample Sizes 
   
   # for ASE 2013 cart method
   experParams$previousCartMethod <<- TRUE
 
+  #   sample method:     "holdout","crossvalidation","bootsraping"; default is crossvalidation
+  experParams$sampleMethod <<- c("holdout","crossvalidation","bootsraping")
+  experParams$foldNumber <<- 10  # the fold number of cross validation
+  
+  
+  #parameter optimization search method: "randomsearch","bayesian","gridsearch"  
+  experParams$paraSearchMethod <<- c("gridsearch")  #default is "gridsearch"  
+  
+  
   outputFolder <<- file.path("data", "results")
 }
 
