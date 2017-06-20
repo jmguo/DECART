@@ -8,7 +8,7 @@ We bring the idea of data-efficient learning to performance prediction of config
 
 DECART combines our previous approach based on plain CART (ref: https://github.com/jmguo/cpm/) with automated resampling and parameter tuning. Using resampling, DECART learns a prediction model and determines the model's accuracy based on a given sample of measured configurations. Using parameter tuning, DECART ensures that the prediction model has been learned using optimal parameter settings of CART based on the currently available sample. DECART incorporates three well-established resampling methods (hold-out, 10-fold cross-validation, and bootstrapping) and three parameter-tuning techniques (random search, grid search, and Bayesian optimization).
 
-We implemented DECART using GNU R, Version 3.4. In particular, we used the R package rpart to implement the underlying CART and to train the performance models. Moreover, we used the R package rBayesianOptimization to implement Bayesian optimization.
+We implemented DECART using *GNU R*, Version 3.4. In particular, we used the R package *rpart* to implement the underlying CART and to train the performance models. Moreover, we used the R package *rBayesianOptimization* to implement Bayesian optimization.
 
 The source code contains the following files:
 - main.R : the main entrance to the program. Starting from here, the entire process is automated.
