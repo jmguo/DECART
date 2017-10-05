@@ -1,0 +1,46 @@
+c 1 root
+c 2 Base
+c 3 CodeFormatter
+c 4 Classes
+c 5 Interfaces
+c 6 Aspects
+c 7 States
+c 8 ClassMethods
+c 9 ClassConstructors
+c 10 InterfaceMethods
+c 11 AspectMethods
+c 12 AspectConstructors
+c 13 ClassFields
+c 14 InterfaceFields
+c 15 AspectFields
+c 16 Advice
+c 17 Pointcuts
+c 18 InterTypeMethods
+c 19 InterTypeConstructors
+c 20 InterTypeFields
+c 21 InterTypeDeclare
+p cnf 21 24
+1 0
+2 0
+6 0
+7 0
+1 -2 0
+1 -3 0
+1 -4 0
+1 -5 0
+1 -6 0
+1 -7 0
+1 -8 0
+1 -9 0
+1 -10 0
+1 -11 0
+1 -12 0
+1 -13 0
+1 -14 0
+1 -15 0
+1 -16 0
+1 -17 0
+1 -18 0
+1 -19 0
+1 -20 0
+1 -21 0
